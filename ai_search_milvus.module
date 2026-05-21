@@ -1,0 +1,49 @@
+<?php
+
+/**
+ * Implements hook_autoload_info().
+ */
+function ai_search_milvus_autoload_info() {
+  return [
+    'AIMilvusService' => 'includes/AIMilvusService.inc',
+    'AiSearchMilvusVectorClient' => 'includes/AiSearchMilvusVectorClient.php',
+    'AiSearchMilvusV2' => 'includes/AiSearchMilvusV2.php',
+  ];
+}
+
+/**
+ * Implements hook_search_api_service_info().
+ */
+function ai_search_milvus_search_api_service_info() {
+  return [
+    'milvus' => [
+      'name' => t('Milvus'),
+      'description' => t('Milvus backend for Search API AI.'),
+      'class' => 'AIMilvusService',
+      'file' => 'includes/AIMilvusService.inc',
+    ],
+  ];
+}
+
+/**
+ * Implements hook_ai_search_rag_backend_info().
+ */
+function ai_search_milvus_ai_search_rag_backend_info() {
+  return [
+    'milvus' => [
+      'server_classes' => ['milvus'],
+      'query_callback' => 'ai_search_query_backend_milvus',
+      'matches_callback' => 'ai_search_backend_result_matches_milvus',
+    ],
+  ];
+}
+
+/**
+ * Validation callback for Milvus collection name.
+ */
+function ai_search_milvus_validate_collection_name($element, &$form_state) {
+  $value = $element['#value'];
+  if (!empty($value) && !preg_match('/^[a-zA-Z0-9_]+$/', $value)) {
+    form_error($element, t('Collection name can only contain letters, numbers, and underscores. Hyphens and other special characters are not allowed.'));
+  }
+}

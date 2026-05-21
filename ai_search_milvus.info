@@ -1,0 +1,6 @@
+name = AI Search Milvus
+description = Milvus vector database provider for AI search.
+backdrop = 1.x
+type = module
+package = AI
+dependencies[] = ai_search
