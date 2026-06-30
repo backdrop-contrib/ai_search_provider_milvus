@@ -298,12 +298,13 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
         $id = (int) $id;
         $exprParts[] = sprintf('backdrop_entity_id == "entity:%s/%d:en"', $entity_type, $id);
       }
-      $expr = '(' . implode(' or ', $exprParts) . ']';
+      $expr = '(' . implode(' or ', $exprParts) . ')';
 
+      // The client expects the filter expression as a plain string.
       $this->client->delete([
         'collection' => $collection,
         'database'   => $database,
-        'filter'     => ['expr' => $expr],
+        'filter'     => $expr,
       ]);
     }
     catch (\Exception $e) {

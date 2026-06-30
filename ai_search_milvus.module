@@ -32,10 +32,64 @@ function ai_search_milvus_ai_search_rag_backend_info() {
   return [
     'milvus' => [
       'server_classes' => ['milvus'],
-      'query_callback' => 'ai_search_query_backend_milvus',
-      'matches_callback' => 'ai_search_backend_result_matches_milvus',
+      'query_callback' => 'ai_search_milvus_rag_query',
+      'matches_callback' => 'ai_search_milvus_rag_matches',
     ],
   ];
+}
+
+/**
+ * Canonical output fields requested from Milvus match rows.
+ */
+function ai_search_milvus_output_fields() {
+  return ['content', 'nid', 'title', 'backdrop_entity_id', 'backdrop_long_id', 'field_name', 'server_id', 'index_id'];
+}
+
+/**
+ * Query callback: run a vector query against a Milvus backend for ai_search RAG.
+ *
+ * Registered via hook_ai_search_rag_backend_info(); the signature matches the
+ * query_callback contract documented in ai_search.api.php.
+ */
+function ai_search_milvus_rag_query($server, $index, array $vector, $dimension, $top_k) {
+  // Classes are autoloaded via hook_autoload_info(); the explicit loads only
+  // cover edge cases where autoloading has not run yet.
+  if (!class_exists('AIMilvusService')) {
+    module_load_include('inc', 'ai_search_milvus', 'includes/AIMilvusService');
+  }
+  if (!class_exists('AiSearchMilvusVectorClient')) {
+    module_load_include('php', 'ai_search_milvus', 'includes/AiSearchMilvusVectorClient');
+  }
+  if (!class_exists('AIMilvusService') || !class_exists('AiSearchMilvusVectorClient')) {
+    throw new \Exception('Milvus provider classes unavailable. Enable the AI Search Milvus module.');
+  }
+
+  $service = new AIMilvusService($server);
+  $collection = method_exists($service, 'getCollection') ? $service->getCollection($index) : $index->machine_name;
+  $database = isset($server->options['database']) ? $server->options['database'] : 'default';
+  $client = new AiSearchMilvusVectorClient($server->options);
+
+  $result = $client->query([
+    'vector' => $vector,
+    'top_k' => $top_k,
+    'collection' => $collection,
+    'database' => $database,
+    'output_fields' => ai_search_milvus_output_fields(),
+  ]);
+
+  return ai_search_enrich_backend_matches($index, is_array($result) ? $result : []);
+}
+
+/**
+ * Matches callback: extract normalized match rows from a Milvus response.
+ *
+ * Registered via hook_ai_search_rag_backend_info().
+ */
+function ai_search_milvus_rag_matches($vector_results, $server = NULL, $index = NULL) {
+  if (!empty($vector_results['results']) && is_array($vector_results['results'])) {
+    return array_values($vector_results['results']);
+  }
+  return is_array($vector_results) ? array_values($vector_results) : [];
 }
 
 /**
