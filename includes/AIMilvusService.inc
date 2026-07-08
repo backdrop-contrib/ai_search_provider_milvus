@@ -362,7 +362,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
       return ['result count' => 0, 'results' => []];
     }
 
-    $query_embedding = $api->embedding($text, $model_to_use);
+    $query_embedding = $api->embedding(ai_search_apply_embedding_task_prefix($text, $model_to_use, 'query'), $model_to_use);
 
     if (empty($query_embedding)) {
       throw new Exception('Failed to retrieve embedding.');
