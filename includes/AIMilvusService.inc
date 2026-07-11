@@ -298,12 +298,13 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
         $id = (int) $id;
         $exprParts[] = sprintf('backdrop_entity_id == "entity:%s/%d:en"', $entity_type, $id);
       }
-      $expr = '(' . implode(' or ', $exprParts) . ']';
+      $expr = '(' . implode(' or ', $exprParts) . ')';
 
+      // The client expects the filter expression as a plain string.
       $this->client->delete([
         'collection' => $collection,
         'database'   => $database,
-        'filter'     => ['expr' => $expr],
+        'filter'     => $expr,
       ]);
     }
     catch (\Exception $e) {
@@ -361,7 +362,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
       return ['result count' => 0, 'results' => []];
     }
 
-    $query_embedding = $api->embedding($text, $model_to_use);
+    $query_embedding = $api->embedding(ai_search_apply_embedding_task_prefix($text, $model_to_use, 'query'), $model_to_use);
 
     if (empty($query_embedding)) {
       throw new Exception('Failed to retrieve embedding.');
