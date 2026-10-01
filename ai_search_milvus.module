@@ -68,12 +68,14 @@ function ai_search_milvus_rag_query($server, $index, array $vector, $dimension, 
   $collection = method_exists($service, 'getCollection') ? $service->getCollection($index) : $index->machine_name;
   $database = isset($server->options['database']) ? $server->options['database'] : 'default';
   $client = new AiSearchMilvusVectorClient($server->options);
+  $filter = 'index_id == ' . (int) $index->id();
 
   $result = $client->query([
     'vector' => $vector,
     'top_k' => $top_k,
     'collection' => $collection,
     'database' => $database,
+    'filter' => $filter,
     'output_fields' => ai_search_milvus_output_fields(),
   ]);
 

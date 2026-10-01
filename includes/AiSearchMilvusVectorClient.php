@@ -28,7 +28,14 @@ class AiSearchMilvusVectorClient extends AiSearchVectorClientBase {
     // Support both ai_embeddings and ai_search settings formats
     $server = $options['server'] ?? $options['milvus_server'] ?? $options['basehost'] ?? '';
     $port = $options['port'] ?? $options['milvus_port'] ?? '';
-    $api_key = $options['api_key'] ?? key_get_key_value($options['milvus_token'] ?? '') ?? '';
+    $key_name = $options['api_key'] ?? $options['milvus_token'] ?? '';
+    $api_key = '';
+    if ($key_name) {
+      $api_key = function_exists('key_get_key_value') ? key_get_key_value($key_name) : NULL;
+      if (!is_string($api_key) || trim($api_key) === '') {
+        throw new \InvalidArgumentException('The configured Milvus API key does not resolve to a Key value.');
+      }
+    }
 
     // Ensure server URL is in the correct format for Zilliz detection
     if (!empty($server)) {
@@ -85,6 +92,7 @@ class AiSearchMilvusVectorClient extends AiSearchVectorClientBase {
     $collection = $item['collection'];
     $database = isset($item['database']) ? $item['database'] : 'default';
 
+    $all_succeeded = TRUE;
     foreach ($item['vectors'] as $orig_vector) {
       $vector = $orig_vector;
 
@@ -102,7 +110,9 @@ class AiSearchMilvusVectorClient extends AiSearchVectorClientBase {
       // Flatten 'metadata' to top-level fields (optional, but handy for filtering)
       if (isset($vector['metadata']) && is_array($vector['metadata'])) {
         foreach ($vector['metadata'] as $k => $v) {
-          $vector[$k] = $v;
+          if ($v !== NULL) {
+            $vector[$k] = is_scalar($v) ? $v : (is_array($v) ? json_encode($v) : (string) $v);
+          }
         }
         unset($vector['metadata']);
       }
@@ -125,6 +135,7 @@ class AiSearchMilvusVectorClient extends AiSearchVectorClientBase {
             '@collection' => $collection,
             '@summary' => $this->summarizeLogData($create),
           ], WATCHDOG_ERROR);
+          $all_succeeded = FALSE;
           continue;
         }
         else {
@@ -140,8 +151,10 @@ class AiSearchMilvusVectorClient extends AiSearchVectorClientBase {
       // Log any final errors.
       if (empty($result) || (isset($result['code']) && $result['code'] !== 0 && $result['code'] !== 200)) {
         watchdog('ai_embeddings', 'Milvus insert failed: @summary', ['@summary' => $this->summarizeLogData($result)], WATCHDOG_ERROR);
+        $all_succeeded = FALSE;
       }
     }
+    return $all_succeeded;
   }
 
   /**
@@ -155,12 +168,13 @@ class AiSearchMilvusVectorClient extends AiSearchVectorClientBase {
    * Search for vectors.
    */
   public function search($collection, $vector, $top_k = 10, $outputFields = ['content'], $database = 'default', $filter = '') {
+    $top_k = max(1, (int) $top_k);
     $result = $this->milvus->search(
       $collection,
       $vector,
       $outputFields,
       $filter,
-      $top_k * 2, // Request more results to account for duplicates
+      max(1, $top_k * 2), // Request more results to account for duplicates
       0,
       $database
     );
@@ -341,7 +355,7 @@ class AiSearchMilvusVectorClient extends AiSearchVectorClientBase {
       }
       return $result;
     }
-    catch (\Exception $e) {
+    catch (\Throwable $e) {
       watchdog('ai_embeddings', 'Exception creating Milvus collection @collection: @message', [
         '@collection' => $collection,
         '@message' => $e->getMessage(),

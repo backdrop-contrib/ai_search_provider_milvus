@@ -99,9 +99,11 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
       '#default_value' => !empty($this->options['port']) ? $this->options['port'] : '443',
     ];
     $form['api_key'] = [
-      '#type' => 'textfield',
+      '#type' => 'key_select',
       '#title' => t('API Key'),
-      '#description' => t('The API key to use for authentication.'),
+      '#options' => function_exists('key_get_key_names_as_options') ? key_get_key_names_as_options() : [],
+      '#key_filters' => ['type' => 'authentication'],
+      '#description' => t('Select the Key that stores the Milvus API key. Leave empty for an unauthenticated local Milvus server.'),
       '#default_value' => !empty($this->options['api_key']) ? $this->options['api_key'] : '',
     ];
     $form['database'] = [
@@ -116,7 +118,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
       '#title' => t('Collection'),
       '#description' => t('The collection to use. This will be generated if it does not exist and cannot be changed.'),
       '#default_value' => !empty($this->options['collection']) ? $this->options['collection'] : '',
-      '#required' => TRUE,
+      '#required' => FALSE,
       '#pattern' => '[a-zA-Z0-9_]*',
     ];
     $form['metric_type'] = [
@@ -140,7 +142,9 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
    */
   public function indexItems(SearchApiIndex $index, array $items) {
     global $ai_search_is_indexing;
+    $previous_indexing = !empty($ai_search_is_indexing);
     $ai_search_is_indexing = TRUE;
+    try {
 
     $serverId = $this->server->id();
     $indexId  = $index->id();
@@ -164,11 +168,12 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
       ? (int) $this->options['embeddings_engine_configuration']['dimension']
       : ai_search_get_embedding_dimension();
 
-    $collection = $this->options['collection'];
-    $database   = $this->options['database'];
+    $collection = $this->getCollection($index);
+    $database   = $this->options['database'] ?? 'default';
 
     $successful_item_ids = [];
     $batch_vectors = [];
+    $pending_item_ids = [];
 
     // Build a map of entity_type => [ids] from $items.
     $item_ids_to_index = [];
@@ -194,12 +199,13 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
         if (empty($rows)) {
           continue;
         }
-
+        $has_vectors = FALSE;
         foreach ($rows as $r) {
           // Only index fields that are configured as llm_vector_embedding on this index.
           if (!in_array($r['field_name'], $vector_field_names, TRUE)) {
             continue;
           }
+          $has_vectors = TRUE;
 
           // Compose a stable ID per chunk (matches Pinecone convention).
           $milvus_id = "entity:{$entity_type}/{$entity_id}:en:{$r['field_name']}:{$r['chunk_index']}";
@@ -233,28 +239,60 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
           $batch_vectors[] = [
             'id'       => $milvus_id,
             'values'   => $r['values'], // already floatval + correct order from normalizer
-            'metadata' => $metadata,
+            'metadata' => ai_search_prepare_vector_metadata($metadata),
           ];
-
-          $successful_item_ids[] = $entity_id;
+        }
+        if ($has_vectors) {
+          $pending_item_ids[$entity_type][] = $entity_id;
         }
       }
     }
 
     if (!empty($batch_vectors)) {
       try {
-        $this->client->upsert([
+        $entity_filter_parts = [];
+        foreach ($pending_item_ids as $entity_type => $entity_ids) {
+          foreach (array_unique($entity_ids) as $entity_id) {
+            $entity_filter_parts[] = 'backdrop_entity_id == "entity:' . $entity_type . '/' . (int) $entity_id . ':en"';
+          }
+        }
+        $filter = 'index_id == ' . (int) $indexId;
+        if ($entity_filter_parts) {
+          $filter .= ' and (' . implode(' or ', $entity_filter_parts) . ')';
+          try {
+            $this->client->delete([
+              'collection' => $collection,
+              'database' => $database,
+              'filter' => $filter,
+            ]);
+          }
+          catch (\Throwable $e) {
+            // A first index run has no collection to clean up yet. The
+            // upsert client will create it after this best-effort cleanup.
+            watchdog('ai_search_milvus', 'Existing-vector cleanup skipped: @message', ['@message' => $e->getMessage()], WATCHDOG_NOTICE);
+          }
+        }
+        $upserted = $this->client->upsert([
           'collection' => $collection,
           'database'   => $database,
           'vectors'    => $batch_vectors,
         ]);
+        if ($upserted) {
+          foreach ($pending_item_ids as $ids) {
+            $successful_item_ids = array_merge($successful_item_ids, $ids);
+          }
+        }
       }
-      catch (\Exception $e) {
+      catch (\Throwable $e) {
         watchdog('ai_search_milvus', 'Milvus indexing error: @message', ['@message' => $e->getMessage()], WATCHDOG_ERROR);
       }
     }
 
     return array_values(array_unique($successful_item_ids));
+    }
+    finally {
+      $ai_search_is_indexing = $previous_indexing;
+    }
   }
 
 
@@ -267,7 +305,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
       return;
     }
 
-    $collection = $this->options['collection'] ?? '';
+    $collection = $this->getCollection($index);
     $database   = $this->options['database']   ?? NULL;
 
     if (empty($collection)) {
@@ -277,12 +315,17 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
 
     try {
       if ($ids === 'all') {
-        // Delete everything in this collection (or add an index/namespace clause if needed).
-        $this->client->delete([
+        $payload = [
           'collection' => $collection,
           'database'   => $database,
-          'deleteAll'  => TRUE,
-        ]);
+        ];
+        if ($index) {
+          $payload['filter'] = 'index_id == ' . (int) $index->id();
+        }
+        else {
+          $payload['deleteAll'] = TRUE;
+        }
+        $this->client->delete($payload);
         return;
       }
 
@@ -290,15 +333,22 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
         return;
       }
 
-      $entity_type = $index ? $index->getEntityType() : 'node';
+      $ids_by_type = ai_search_normalize_entity_ids($ids, $index ? $index->getEntityType() : 'node');
+      if (empty($ids_by_type)) {
+        return;
+      }
 
-      // Build OR-of-equalities on backdrop_entity_id for this index's entity type.
+      // Build OR-of-equalities on backdrop_entity_id and scope by index.
       $exprParts = [];
-      foreach ($ids as $id) {
-        $id = (int) $id;
-        $exprParts[] = sprintf('backdrop_entity_id == "entity:%s/%d:en"', $entity_type, $id);
+      foreach ($ids_by_type as $entity_type => $entity_ids) {
+        foreach ($entity_ids as $id) {
+          $exprParts[] = sprintf('backdrop_entity_id == "entity:%s/%d:en"', $entity_type, $id);
+        }
       }
       $expr = '(' . implode(' or ', $exprParts) . ')';
+      if ($index) {
+        $expr = 'index_id == ' . (int) $index->id() . ' and ' . $expr;
+      }
 
       // The client expects the filter expression as a plain string.
       $this->client->delete([
@@ -307,7 +357,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
         'filter'     => $expr,
       ]);
     }
-    catch (\Exception $e) {
+    catch (\Throwable $e) {
       watchdog('ai_search_milvus', 'Delete error: @m', ['@m' => $e->getMessage()], WATCHDOG_ERROR);
     }
   }
@@ -317,59 +367,21 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
    * Performs a search in Milvus.
    */
   public function search(SearchApiQueryInterface $query) {
-    $collection = $this->options['collection'];
-    $database = $this->options['database'];
+    $collection = $this->getCollection($query->getIndex());
+    $database = $this->options['database'] ?? 'default';
     $index = $query->getIndex();
     $index_options = isset($index->options) ? $index->options : [];
 
-    // Model selection: server options (canonical) → service embedding_model fallback.
-    $model = $this->options['embeddings_engine'] ?? $this->options['embedding_model'] ?? NULL;
-
-    if (empty($model)) {
-      watchdog(
-        'ai_search_milvus',
-        'No model configured!',
-        [],
-        WATCHDOG_ERROR
-      );
+    $resolved = ai_search_resolve_query_embedding($query, $this->options, 'ai_search_milvus');
+    if ($resolved === NULL) {
       return ['result count' => 0, 'results' => []];
     }
+    $text = $resolved['text'];
+    $query_embedding = $resolved['vector'];
 
-    // Extract search text.
-    $keys = $query->getKeys();
-    $text = is_array($keys)
-      ? implode(' ', array_filter($keys, function($key) {
-        return is_string($key) && $key !== 'AND' && $key !== '#conjunction';
-      }))
-      : (string) $keys;
-    $text = trim($text);
-
-    if (empty($text)) {
-      return ['result count' => 0, 'results' => []];
-    }
-
-    // Resolve client and request embedding using compatibility helpers.
-    $stripped_model = NULL;
-    $api = ai_get_api_for_model($model, $stripped_model);
-    $model_to_use = !empty($stripped_model) ? $stripped_model : $model;
-
-    if ($api && method_exists($api, 'recordLog')) {
-      $api->recordLog('search_embedding', $model, ['text_len' => strlen($text)], NULL, TRUE, 0);
-    }
-
-    if (!$api) {
-      watchdog('ai_search_milvus', 'No AI client available for model: @model', ['@model' => $model], WATCHDOG_ERROR);
-      return ['result count' => 0, 'results' => []];
-    }
-
-    $query_embedding = $api->embedding(ai_search_apply_embedding_task_prefix($text, $model_to_use, 'query'), $model_to_use);
-
-    if (empty($query_embedding)) {
-      throw new Exception('Failed to retrieve embedding.');
-    }
-
-    $top_k = $query->getOption('top_k') ?? 8;
+    $top_k = max(1, (int) ($query->getOption('top_k') ?? 8));
     $outputFields = ['content', 'nid', 'title', 'backdrop_entity_id', 'backdrop_long_id', 'field_name', 'server_id', 'index_id'];
+    $filter = 'index_id == ' . (int) $index->id();
 
     // Actual search
     try {
@@ -379,6 +391,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
         'collection'       => $collection,
         'database'         => $database,
         'include_metadata' => TRUE,
+        'filter'           => $filter,
         'output_fields'    => $outputFields,
       ]);
 
@@ -439,6 +452,11 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
         if ($entity_type && $entity_id) {
           $item_id = $entity_type == $query->getIndex()->getEntityType()
             ? $entity_id : "{$entity_type}/{$entity_id}";
+          // Matches arrive best-first; keep the best chunk per entity. Later chunks
+          // would overwrite its score/excerpt while keeping its array position.
+          if (isset($results[$item_id])) {
+            continue;
+          }
           $results[$item_id] = [
             'id'      => $item_id,
             'score'   => $nm['score'],
@@ -455,7 +473,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
         'results'      => $results,
       ];
     }
-    catch (\Exception $e) {
+    catch (\Throwable $e) {
       watchdog('ai_search_milvus', 'Milvus query error: @message', [
         '@message' => $e->getMessage(),
       ], WATCHDOG_ERROR);
@@ -465,7 +483,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
 
   public function getCollection($index) {
     $collection = !empty($this->options['collection'])
-      ? $this->options['collection'] : $index->machine_name;
+      ? $this->options['collection'] : ($index && !empty($index->machine_name) ? $index->machine_name : '');
     return preg_replace('/[^a-zA-Z0-9_]/', '_', $collection);
   }
 
