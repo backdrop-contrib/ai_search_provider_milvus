@@ -86,7 +86,10 @@ class AiSearchMilvusV2 {
     // Top-level autoID only (try TRUE and see what happens):
     $options['autoID'] = $options['autoID'] ?? TRUE;
     $options['schema']['autoID'] = TRUE;
-    $options['schema']['enableDynamicField'] = FALSE;
+    // Metadata fields are added dynamically by the Search API contextual
+    // field pipeline. Disabling dynamic fields makes valid indexed metadata
+    // fail at insert time unless every possible field is predeclared.
+    $options['schema']['enableDynamicField'] = TRUE;
 
     $response = $this->makeRequest('vectordb/collections/create', [], 'POST', $options);
     $decoded = json_decode($response, TRUE);
@@ -364,8 +367,18 @@ class AiSearchMilvusV2 {
     }
 
     $response = backdrop_http_request($url, $request_options);
-    if (!empty($response->error) && empty($response->data)) {
-      throw new \Exception('Milvus request failed: ' . $response->error);
+    $status = isset($response->code) ? (int) $response->code : 0;
+    $raw_data = $response->data ?? '';
+    $data = json_decode($raw_data, TRUE);
+    if (!empty($response->error) || $status >= 400) {
+      $message = !empty($response->error) ? $response->error : '';
+      if (is_array($data)) {
+        $message = $data['message'] ?? $data['error'] ?? $message;
+      }
+      throw new \Exception('Milvus request failed' . ($message ? ': ' . $message : ' (HTTP ' . $status . ')'));
+    }
+    if ($raw_data !== '' && !is_array($data) && json_last_error() !== JSON_ERROR_NONE) {
+      throw new \Exception('Milvus returned invalid JSON: ' . json_last_error_msg());
     }
     return $response->data ?? '';
   }

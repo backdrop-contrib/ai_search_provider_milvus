@@ -4,3 +4,4 @@ backdrop = 1.x
 type = module
 package = AI
 dependencies[] = ai_search
+dependencies[] = key

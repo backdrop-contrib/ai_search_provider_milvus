@@ -20,8 +20,8 @@ Milvus vector database provider for the Backdrop CMS AI Search module. Stores an
 4. Configure the server settings:
    - **Host** — URL or hostname of your Milvus instance. For Zilliz Cloud, use the full `https://` URL (e.g., `https://xxx.zillizcloud.com`).
    - **Port** — Port to connect on. Defaults to `443`; use `19530` for local Milvus.
-   - **API Key** — API key or token for authentication (required for Zilliz Cloud).
-   - **Collection** — Name of the Milvus collection to use. Auto-created if it does not exist and cannot be changed after indexing.
+   - **API Key** — Select a Key-module entry containing the API key or token (required for Zilliz Cloud). The secret is never entered into Search API configuration as plain text.
+   - **Collection** — Optional collection name. If blank, the Search API index machine name is used. The collection is auto-created if it does not exist.
    - **Metric Type** — Distance metric for nearest-neighbor search: `COSINE` (default), `IP`, or `L2`.
 5. Create a Search API index on that server and configure the embeddings engine.
 6. Index your content to populate the Milvus collection.
