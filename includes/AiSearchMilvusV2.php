@@ -120,7 +120,7 @@ class AiSearchMilvusV2 {
       // Log the raw response and the JSON error so callers/operators can
       // distinguish between an empty result and an API/parse failure.
       $raw_preview = is_string($response) ? substr($response, 0, 2000) : '';
-      watchdog('ai_search_milvus', 'vectordb collections drop returned invalid JSON: @err; response preview: @resp', ['@err' => json_last_error_msg(), '@resp' => $raw_preview], WATCHDOG_ERROR);
+      watchdog('ai_search_provider_milvus', 'vectordb collections drop returned invalid JSON: @err; response preview: @resp', ['@err' => json_last_error_msg(), '@resp' => $raw_preview], WATCHDOG_ERROR);
       return [
         'error' => 'invalid_json',
         'message' => json_last_error_msg(),

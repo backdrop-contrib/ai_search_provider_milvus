@@ -269,7 +269,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
           catch (\Throwable $e) {
             // A first index run has no collection to clean up yet. The
             // upsert client will create it after this best-effort cleanup.
-            watchdog('ai_search_milvus', 'Existing-vector cleanup skipped: @message', ['@message' => $e->getMessage()], WATCHDOG_NOTICE);
+            watchdog('ai_search_provider_milvus', 'Existing-vector cleanup skipped: @message', ['@message' => $e->getMessage()], WATCHDOG_NOTICE);
           }
         }
         $upserted = $this->client->upsert([
@@ -284,7 +284,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
         }
       }
       catch (\Throwable $e) {
-        watchdog('ai_search_milvus', 'Milvus indexing error: @message', ['@message' => $e->getMessage()], WATCHDOG_ERROR);
+        watchdog('ai_search_provider_milvus', 'Milvus indexing error: @message', ['@message' => $e->getMessage()], WATCHDOG_ERROR);
       }
     }
 
@@ -309,7 +309,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
     $database   = $this->options['database']   ?? NULL;
 
     if (empty($collection)) {
-      watchdog('ai_search_milvus', 'Missing Milvus collection for deleteItems.', [], WATCHDOG_ERROR);
+      watchdog('ai_search_provider_milvus', 'Missing Milvus collection for deleteItems.', [], WATCHDOG_ERROR);
       return;
     }
 
@@ -358,7 +358,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
       ]);
     }
     catch (\Throwable $e) {
-      watchdog('ai_search_milvus', 'Delete error: @m', ['@m' => $e->getMessage()], WATCHDOG_ERROR);
+      watchdog('ai_search_provider_milvus', 'Delete error: @m', ['@m' => $e->getMessage()], WATCHDOG_ERROR);
     }
   }
 
@@ -372,7 +372,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
     $index = $query->getIndex();
     $index_options = isset($index->options) ? $index->options : [];
 
-    $resolved = ai_search_resolve_query_embedding($query, $this->options, 'ai_search_milvus');
+    $resolved = ai_search_resolve_query_embedding($query, $this->options, 'ai_search_provider_milvus');
     if ($resolved === NULL) {
       return ['result count' => 0, 'results' => []];
     }
@@ -474,7 +474,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
       ];
     }
     catch (\Throwable $e) {
-      watchdog('ai_search_milvus', 'Milvus query error: @message', [
+      watchdog('ai_search_provider_milvus', 'Milvus query error: @message', [
         '@message' => $e->getMessage(),
       ], WATCHDOG_ERROR);
       return ['result count' => 0, 'results' => []];
