@@ -5,7 +5,9 @@ Milvus vector database provider for the Backdrop CMS AI Search module. Stores an
 ## Requirements
 
 - Backdrop CMS 1.x
+- PHP 8.2 or later
 - `ai_search` module
+- [Key](https://backdropcms.org/project/key)
 - A running Milvus instance or a [Zilliz Cloud](https://zilliz.com/) account accessible from your Backdrop site
 
 ## Installation
