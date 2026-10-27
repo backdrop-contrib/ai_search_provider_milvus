@@ -3,7 +3,7 @@
 /**
  * Implements hook_autoload_info().
  */
-function ai_search_milvus_autoload_info() {
+function ai_search_provider_milvus_autoload_info() {
   return [
     'AIMilvusService' => 'includes/AIMilvusService.inc',
     'AiSearchMilvusVectorClient' => 'includes/AiSearchMilvusVectorClient.php',
@@ -14,7 +14,7 @@ function ai_search_milvus_autoload_info() {
 /**
  * Implements hook_search_api_service_info().
  */
-function ai_search_milvus_search_api_service_info() {
+function ai_search_provider_milvus_search_api_service_info() {
   return [
     'milvus' => [
       'name' => t('Milvus'),
@@ -28,12 +28,12 @@ function ai_search_milvus_search_api_service_info() {
 /**
  * Implements hook_ai_search_rag_backend_info().
  */
-function ai_search_milvus_ai_search_rag_backend_info() {
+function ai_search_provider_milvus_ai_search_rag_backend_info() {
   return [
     'milvus' => [
       'server_classes' => ['milvus'],
-      'query_callback' => 'ai_search_milvus_rag_query',
-      'matches_callback' => 'ai_search_milvus_rag_matches',
+      'query_callback' => 'ai_search_provider_milvus_rag_query',
+      'matches_callback' => 'ai_search_provider_milvus_rag_matches',
     ],
   ];
 }
@@ -41,7 +41,7 @@ function ai_search_milvus_ai_search_rag_backend_info() {
 /**
  * Canonical output fields requested from Milvus match rows.
  */
-function ai_search_milvus_output_fields() {
+function ai_search_provider_milvus_output_fields() {
   return ['content', 'nid', 'title', 'backdrop_entity_id', 'backdrop_long_id', 'field_name', 'server_id', 'index_id'];
 }
 
@@ -51,14 +51,14 @@ function ai_search_milvus_output_fields() {
  * Registered via hook_ai_search_rag_backend_info(); the signature matches the
  * query_callback contract documented in ai_search.api.php.
  */
-function ai_search_milvus_rag_query($server, $index, array $vector, $dimension, $top_k) {
+function ai_search_provider_milvus_rag_query($server, $index, array $vector, $dimension, $top_k) {
   // Classes are autoloaded via hook_autoload_info(); the explicit loads only
   // cover edge cases where autoloading has not run yet.
   if (!class_exists('AIMilvusService')) {
-    module_load_include('inc', 'ai_search_milvus', 'includes/AIMilvusService');
+    module_load_include('inc', 'ai_search_provider_milvus', 'includes/AIMilvusService');
   }
   if (!class_exists('AiSearchMilvusVectorClient')) {
-    module_load_include('php', 'ai_search_milvus', 'includes/AiSearchMilvusVectorClient');
+    module_load_include('php', 'ai_search_provider_milvus', 'includes/AiSearchMilvusVectorClient');
   }
   if (!class_exists('AIMilvusService') || !class_exists('AiSearchMilvusVectorClient')) {
     throw new \Exception('Milvus provider classes unavailable. Enable the AI Search Milvus module.');
@@ -76,7 +76,7 @@ function ai_search_milvus_rag_query($server, $index, array $vector, $dimension, 
     'collection' => $collection,
     'database' => $database,
     'filter' => $filter,
-    'output_fields' => ai_search_milvus_output_fields(),
+    'output_fields' => ai_search_provider_milvus_output_fields(),
   ]);
 
   return ai_search_enrich_backend_matches($index, is_array($result) ? $result : []);
@@ -87,7 +87,7 @@ function ai_search_milvus_rag_query($server, $index, array $vector, $dimension, 
  *
  * Registered via hook_ai_search_rag_backend_info().
  */
-function ai_search_milvus_rag_matches($vector_results, $server = NULL, $index = NULL) {
+function ai_search_provider_milvus_rag_matches($vector_results, $server = NULL, $index = NULL) {
   if (!empty($vector_results['results']) && is_array($vector_results['results'])) {
     return array_values($vector_results['results']);
   }
@@ -97,7 +97,7 @@ function ai_search_milvus_rag_matches($vector_results, $server = NULL, $index = 
 /**
  * Validation callback for Milvus collection name.
  */
-function ai_search_milvus_validate_collection_name($element, &$form_state) {
+function ai_search_provider_milvus_validate_collection_name($element, &$form_state) {
   $value = $element['#value'];
   if (!empty($value) && !preg_match('/^[a-zA-Z0-9_]+$/', $value)) {
     form_error($element, t('Collection name can only contain letters, numbers, and underscores. Hyphens and other special characters are not allowed.'));

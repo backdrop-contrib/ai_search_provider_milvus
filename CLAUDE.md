@@ -6,7 +6,7 @@ See `README.md` in this directory for requirements and server configuration (hos
 
 ## Code Map
 
-- `ai_search_milvus.module` — registers the `milvus` Search API service backend
+- `ai_search_provider_milvus.module` — registers the `milvus` Search API service backend
 - `includes/AIMilvusService.inc` — `AIMilvusService extends SearchApiAbstractService implements AiSearchBackendInterface`; handles Search API index configuration and delegates vector ops to the client
 - `includes/AiSearchMilvusVectorClient.php` — `AiSearchMilvusVectorClient extends AiSearchVectorClientBase`; HTTP client for Milvus/Zilliz Cloud (`query()`, `upsert()`, `stats()`)
 
