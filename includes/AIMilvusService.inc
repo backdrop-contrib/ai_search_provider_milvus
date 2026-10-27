@@ -256,7 +256,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
             $entity_filter_parts[] = 'backdrop_entity_id == "entity:' . $entity_type . '/' . (int) $entity_id . ':en"';
           }
         }
-        $filter = 'index_id == ' . (int) $indexId;
+        $filter = $this->indexFilter($indexId);
         if ($entity_filter_parts) {
           $filter .= ' and (' . implode(' or ', $entity_filter_parts) . ')';
           try {
@@ -320,7 +320,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
           'database'   => $database,
         ];
         if ($index) {
-          $payload['filter'] = 'index_id == ' . (int) $index->id();
+          $payload['filter'] = $this->indexFilter($index->id());
         }
         else {
           $payload['deleteAll'] = TRUE;
@@ -347,7 +347,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
       }
       $expr = '(' . implode(' or ', $exprParts) . ')';
       if ($index) {
-        $expr = 'index_id == ' . (int) $index->id() . ' and ' . $expr;
+        $expr = $this->indexFilter($index->id()) . ' and ' . $expr;
       }
 
       // The client expects the filter expression as a plain string.
@@ -381,7 +381,7 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
 
     $top_k = max(1, (int) ($query->getOption('top_k') ?? 8));
     $outputFields = ['content', 'nid', 'title', 'backdrop_entity_id', 'backdrop_long_id', 'field_name', 'server_id', 'index_id'];
-    $filter = 'index_id == ' . (int) $index->id();
+    $filter = $this->indexFilter($index->id());
 
     // Actual search
     try {
@@ -479,6 +479,17 @@ class AIMilvusService extends SearchApiAbstractService implements AiSearchBacken
       ], WATCHDOG_ERROR);
       return ['result count' => 0, 'results' => []];
     }
+  }
+
+  /**
+   * Returns a filter expression scoping rows to one Search API index.
+   *
+   * index_id is a dynamic field; rows hold it as a number or a string
+   * depending on what wrote them (search_api_ai_milvus wrote strings).
+   */
+  public function indexFilter($index_id) {
+    $id = (int) $index_id;
+    return 'index_id in [' . $id . ', "' . $id . '"]';
   }
 
   public function getCollection($index) {
