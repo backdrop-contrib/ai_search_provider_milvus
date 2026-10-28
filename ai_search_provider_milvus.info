@@ -1,4 +1,4 @@
-name = AI Search Milvus
+name = AI Search Provider Milvus
 description = Milvus vector database provider for AI search.
 backdrop = 1.x
 php = 8.2
