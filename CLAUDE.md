@@ -1,4 +1,4 @@
-# AI Search Milvus — Dev Notes
+# AI Search Provider Milvus — Dev Notes
 
 Vector storage backend for the `ai_search` framework (see `../ai_search/CLAUDE.md` for the overall architecture). This module is its own git repo/project (`backdrop-contrib/ai_search_provider_milvus`), a sibling of `ai_search`, not a submodule.
 

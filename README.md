@@ -1,4 +1,4 @@
-# AI Search Milvus
+# AI Search Provider Milvus
 
 Milvus vector database provider for the Backdrop CMS AI Search module. Stores and queries embeddings in a Milvus or Zilliz Cloud instance to power AI-driven semantic search experiences.
 
