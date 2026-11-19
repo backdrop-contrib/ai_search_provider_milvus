@@ -1,32 +1,12 @@
 # AI Search Provider Milvus
 
-Milvus vector database provider for the Backdrop CMS AI Search module. Stores and queries embeddings in a Milvus or Zilliz Cloud instance to power AI-driven semantic search experiences.
-
-## Requirements
-
-- Backdrop CMS 1.x
-- PHP 8.2 or later
-- `ai_search` module
-- [Key](https://backdropcms.org/project/key)
-- A running Milvus instance or a [Zilliz Cloud](https://zilliz.com/) account accessible from your Backdrop site
+Store AI Search embeddings in a Milvus server or Zilliz Cloud. Backdrop sends vectors to the service and retrieves similar content for semantic searches.
 
 ## Installation
 
-- Install this module using the official [Backdrop CMS instructions](https://backdropcms.org/user-guide/modules).
+Enable AI Search, Key, and this module. Choose **Milvus** when creating a Search API server. [Backdrop module installation guide](https://backdropcms.org/user-guide/modules)
 
-## Configuration
-
-1. Enable this module.
-2. Go to Admin -> Configuration -> Search and Metadata -> Search API and create or edit a server.
-3. Select **Milvus** as the service backend.
-4. Configure the server settings:
-   - **Host** — URL or hostname of your Milvus instance. For Zilliz Cloud, use the full `https://` URL (e.g., `https://xxx.zillizcloud.com`).
-   - **Port** — Port to connect on. Defaults to `443`; use `19530` for local Milvus.
-   - **API Key** — Select a Key-module entry containing the API key or token (required for Zilliz Cloud). The secret is never entered into Search API configuration as plain text.
-   - **Collection** — Optional collection name. If blank, the Search API index machine name is used. The collection is auto-created if it does not exist.
-   - **Metric Type** — Distance metric for nearest-neighbor search: `COSINE` (default), `IP`, or `L2`.
-5. Create a Search API index on that server and configure the embeddings engine.
-6. Index your content to populate the Milvus collection.
+[Setup and troubleshooting](https://github.com/backdrop-contrib/ai_search_provider_milvus/wiki)
 
 ## Issues
 
